@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>危険型番判別ツール (スプレッドシート読み書き版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .table-container {
+            display: block;
+            width: 100%;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+        .table-container table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .table-container th, .table-container td {
+            padding: 12px 24px;
+        }
+        /* Style for the loading overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #007bff;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-4 sm:p-8">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl sm:text-4xl font-bold text-center mb-8 text-blue-800">危険型番判別ツール (スプレッドシート読み書き版)</h1>
+        <p class="text-center text-sm mb-4 text-red-600 font-semibold">※ このツールはスプレッドシートとの間でデータの読み書きを行います。</p>
+        
+        <!-- Messages -->
+        <div id="messageContainer" class="mb-4 text-center font-semibold p-2 rounded-lg hidden"></div>
+        
+        <!-- Custom Confirmation Dialog -->
+        <div id="confirmDialog" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50 hidden">
+            <div class="relative bg-white p-8 rounded-2xl shadow-xl text-center max-w-sm mx-auto">
+                <h3 class="text-xl font-bold mb-4">確認</h3>
+                <p class="mb-6 text-gray-700">このデータを削除してもよろしいですか？</p>
+                <div class="flex justify-center space-x-4">
+                    <button id="confirmDeleteBtn" class="px-6 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-200 transform hover:scale-105">
+                        はい、削除
+                    </button>
+                    <button id="cancelDeleteBtn" class="px-6 py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition duration-200 transform hover:scale-105">
+                        キャンセル
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Form Section -->
+        <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-xl mb-8">
+            <h2 id="formTitle" class="text-xl sm:text-2xl font-semibold mb-6 text-gray-700">新しいデータを入力</h2>
+            <form id="inventoryForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div>
+                    <label for="supplier" class="block text-sm font-medium text-gray-600 mb-1">仕入れ先<span class="text-red-500 ml-1">*</span></label>
+                    <input type="text" id="supplier" name="supplier" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="仕入れ先" required>
+                </div>
+                <div>
+                    <label for="base" class="block text-sm font-medium text-gray-600 mb-1">拠点</label>
+                    <input type="text" id="base" name="base" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="拠点">
+                </div>
+                <div>
+                    <label for="modelName" class="block text-sm font-medium text-gray-600 mb-1">型名<span class="text-red-500 ml-1">*</span></label>
+                    <input type="text" id="modelName" name="modelName" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="型名" required>
+                </div>
+                <div>
+                    <label for="modelNumber" class="block text-sm font-medium text-gray-600 mb-1">型番<span class="text-red-500 ml-1">*</span></label>
+                    <input type="text" id="modelNumber" name="modelNumber" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="型番" required>
+                </div>
+                <div>
+                    <label for="cpu" class="block text-sm font-medium text-gray-600 mb-1">CPU</label>
+                    <input type="text" id="cpu" name="cpu" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="CPU">
+                </div>
+                <div>
+                    <label for="clock" class="block text-sm font-medium text-gray-600 mb-1">クロック</label>
+                    <input type="text" id="clock" name="clock" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="クロック">
+                </div>
+                <div>
+                    <label for="memory" class="block text-sm font-medium text-gray-600 mb-1">メモリ</label>
+                    <input type="text" id="memory" name="memory" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="メモリ">
+                </div>
+                <div>
+                    <label for="storage" class="block text-sm font-medium text-gray-600 mb-1">ストレージ</label>
+                    <input type="text" id="storage" name="storage" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="ストレージ">
+                </div>
+                <div>
+                    <label for="screenSize" class="block text-sm font-medium text-gray-600 mb-1">画面サイズ</label>
+                    <input type="text" id="screenSize" name="screenSize" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="画面サイズ">
+                </div>
+                <div>
+                    <label for="other" class="block text-sm font-medium text-gray-600 mb-1">その他</label>
+                    <input type="text" id="other" name="other" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="その他">
+                </div>
+                <div>
+                    <label for="modelNumberCode" class="block text-sm font-medium text-gray-600 mb-1">型番コード</label>
+                    <input type="text" id="modelNumberCode" name="modelNumberCode" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="型番コード">
+                </div>
+                <div>
+                    <label for="riskFactors" class="block text-sm font-medium text-gray-600 mb-1">危険要因</label>
+                    <input type="text" id="riskFactors" name="riskFactors" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="危険要因">
+                </div>
+                <input type="hidden" id="editRowIndex">
+                <div class="mt-8 text-center col-span-full">
+                    <button type="submit" id="saveOrUpdateBtn" class="w-full sm:w-auto px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105">
+                        保存
+                    </button>
+                    <button type="button" id="cancelBtn" class="w-full sm:w-auto px-8 py-3 bg-gray-300 text-gray-800 font-bold rounded-xl shadow-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 hidden mt-4 sm:mt-0 ml-0 sm:ml-4">
+                        キャンセル
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-xl mb-8">
+            <h2 class="text-xl sm:text-2xl font-semibold mb-6 text-gray-700">データをフィルタ</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div>
+                    <label for="filterSupplier" class="block text-sm font-medium text-gray-600 mb-1">仕入れ先</label>
+                    <input type="text" id="filterSupplier" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="仕入れ先でフィルタ">
+                </div>
+                <div>
+                    <label for="filterModelName" class="block text-sm font-medium text-gray-600 mb-1">型名</label>
+                    <input type="text" id="filterModelName" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="型名でフィルタ">
+                </div>
+                <div>
+                    <label for="filterModelNumber" class="block text-sm font-medium text-gray-600 mb-1">型番</label>
+                    <input type="text" id="filterModelNumber" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="型番でフィルタ">
+                </div>
+                <div>
+                    <label for="filterModelNumberCode" class="block text-sm font-medium text-gray-600 mb-1">型番コード</label>
+                    <input type="text" id="filterModelNumberCode" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 ease-in-out" placeholder="型番コードでフィルタ">
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Display Section -->
+        <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-xl">
+            <h2 class="text-xl sm:text-2xl font-semibold mb-6 text-gray-700">スプレッドシートのデータ (<span id="dataCount">0</span>)</h2>
+            <div id="loadingIndicator" class="text-center text-gray-500">データを読み込み中...</div>
+            <div id="dataContainer" class="table-container rounded-lg shadow-inner hidden">
+                <table class="min-w-full bg-white table-auto">
+                    <thead>
+                        <tr class="bg-gray-200 text-gray-600 uppercase text-sm leading-normal">
+                            <th class="py-3 px-6 text-left">仕入れ先</th>
+                            <th class="py-3 px-6 text-left">拠点</th>
+                            <th class="py-3 px-6 text-left">型名</th>
+                            <th class="py-3 px-6 text-left">型番</th>
+                            <th class="py-3 px-6 text-left hidden lg:table-cell">CPU</th>
+                            <th class="py-3 px-6 text-left hidden lg:table-cell">クロック</th>
+                            <th class="py-3 px-6 text-left hidden lg:table-cell">メモリ</th>
+                            <th class="py-3 px-6 text-left hidden lg:table-cell">ストレージ</th>
+                            <th class="py-3 px-6 text-left hidden lg:table-cell">画面サイズ</th>
+                            <th class="py-3 px-6 text-left hidden lg:table-cell">その他</th>
+                            <th class="py-3 px-6 text-left hidden lg:table-cell">型番コード</th>
+                            <th class="py-3 px-6 text-left hidden lg:table-cell">危険要因</th>
+                            <th class="py-3 px-6 text-center">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventoryTableBody" class="text-gray-600 text-sm font-light">
+                        <!-- Data will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <p id="noDataMessage" class="text-center text-gray-500 hidden">データが見つかりません。</p>
+        </div>
+    </div>
+    
+    <script>
+        // この部分をご自身でデプロイしたGoogle Apps ScriptのURLに置き換えてください
+        const SPREADSHEET_API_URL = 'https://script.google.com/macros/s/AKfycbzMYhyv7eru7AXbMmWLD4vg9TgvZoc0D1KR6MXzRIpNNj226lU_QcgRnk87kGM0PDX-/exec';
+        
+        // UI Elements
+        const form = document.getElementById('inventoryForm');
+        const formTitle = document.getElementById('formTitle');
+        const saveOrUpdateBtn = document.getElementById('saveOrUpdateBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const inventoryTableBody = document.getElementById('inventoryTableBody');
+        const messageContainer = document.getElementById('messageContainer');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const dataContainer = document.getElementById('dataContainer');
+        const dataCountSpan = document.getElementById('dataCount');
+        const noDataMessage = document.getElementById('noDataMessage');
+        const confirmDialog = document.getElementById('confirmDialog');
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+
+        // Form Elements
+        const formElements = {
+            supplier: document.getElementById('supplier'),
+            base: document.getElementById('base'),
+            modelName: document.getElementById('modelName'),
+            modelNumber: document.getElementById('modelNumber'),
+            cpu: document.getElementById('cpu'),
+            clock: document.getElementById('clock'),
+            memory: document.getElementById('memory'),
+            storage: document.getElementById('storage'),
+            screenSize: document.getElementById('screenSize'),
+            other: document.getElementById('other'),
+            modelNumberCode: document.getElementById('modelNumberCode'),
+            riskFactors: document.getElementById('riskFactors'),
+        };
+
+        // Filter Elements
+        const filterSupplier = document.getElementById('filterSupplier');
+        const filterModelName = document.getElementById('filterModelName');
+        const filterModelNumber = document.getElementById('filterModelNumber');
+        const filterModelNumberCode = document.getElementById('filterModelNumberCode');
+
+        let allInventoryData = [];
+        let isEditMode = false;
+        let currentEditIndex = null;
+        let itemToDeleteIndex = null;
+        
+        // Function to show/hide messages
+        const showMessage = (msg, isError = false) => {
+            messageContainer.textContent = msg;
+            messageContainer.classList.remove('hidden', 'text-green-600', 'bg-green-100', 'text-red-600', 'bg-red-100');
+            if (isError) {
+                messageContainer.classList.add('text-red-600', 'bg-red-100');
+            } else {
+                messageContainer.classList.add('text-green-600', 'bg-green-100');
+            }
+            setTimeout(() => {
+                messageContainer.classList.add('hidden');
+            }, 3000);
+        };
+        
+        // Render table rows
+        const renderTable = (data) => {
+            inventoryTableBody.innerHTML = '';
+            if (data.length === 0) {
+                noDataMessage.classList.remove('hidden');
+                dataContainer.classList.add('hidden');
+            } else {
+                noDataMessage.classList.add('hidden');
+                dataContainer.classList.remove('hidden');
+                data.forEach((item, index) => {
+                    const row = document.createElement('tr');
+                    row.className = "border-b border-gray-200 hover:bg-gray-100";
+                    row.innerHTML = `
+                        <td class="py-3 px-6 text-left whitespace-nowrap">${item.supplier || ''}</td>
+                        <td class="py-3 px-6 text-left">${item.base || ''}</td>
+                        <td class="py-3 px-6 text-left">${item.modelName || ''}</td>
+                        <td class="py-3 px-6 text-left">${item.modelNumber || ''}</td>
+                        <td class="py-3 px-6 text-left hidden lg:table-cell">${item.cpu || ''}</td>
+                        <td class="py-3 px-6 text-left hidden lg:table-cell">${item.clock || ''}</td>
+                        <td class="py-3 px-6 text-left hidden lg:table-cell">${item.memory || ''}</td>
+                        <td class="py-3 px-6 text-left hidden lg:table-cell">${item.storage || ''}</td>
+                        <td class="py-3 px-6 text-left hidden lg:table-cell">${item.screenSize || ''}</td>
+                        <td class="py-3 px-6 text-left hidden lg:table-cell">${item.other || ''}</td>
+                        <td class="py-3 px-6 text-left hidden lg:table-cell">${item.modelNumberCode || ''}</td>
+                        <td class="py-3 px-6 text-left hidden lg:table-cell">${item.riskFactors || ''}</td>
+                        <td class="py-3 px-6 text-center whitespace-nowrap">
+                            <div class="flex items-center justify-center space-x-2">
+                                <button class="bg-green-500 text-white text-sm px-3 py-1 rounded-lg hover:bg-green-600 transition duration-200 edit-btn" data-index="${index}">編集</button>
+                                <button class="bg-red-500 text-white text-sm px-3 py-1 rounded-lg hover:bg-red-600 transition duration-200 delete-btn" data-index="${index}">削除</button>
+                            </div>
+                        </td>
+                    `;
+                    inventoryTableBody.appendChild(row);
+                });
+            }
+            dataCountSpan.textContent = data.length;
+        };
+        
+        // Filter data based on input values
+        const applyFilters = () => {
+            const filters = {
+                supplier: filterSupplier.value.toLowerCase(),
+                modelName: filterModelName.value.toLowerCase(),
+                modelNumber: filterModelNumber.value.toLowerCase(),
+                modelNumberCode: filterModelNumberCode.value.toLowerCase(),
+            };
+
+            const filteredData = allInventoryData.filter(item => {
+                const supplierMatch = (item.supplier?.toLowerCase().includes(filters.supplier) || false);
+                const modelNameMatch = (item.modelName?.toLowerCase().includes(filters.modelName) || false);
+                const modelNumberMatch = (item.modelNumber?.toLowerCase().includes(filters.modelNumber) || false);
+                const modelNumberCodeMatch = (item.modelNumberCode?.toLowerCase().includes(filters.modelNumberCode) || false);
+
+                return supplierMatch && modelNameMatch && modelNumberMatch && modelNumberCodeMatch;
+            });
+            renderTable(filteredData);
+        };
+        
+        // Handle form submission (add/update)
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = {
+                supplier: formElements.supplier.value,
+                base: formElements.base.value,
+                modelName: formElements.modelName.value,
+                modelNumber: formElements.modelNumber.value,
+                cpu: formElements.cpu.value,
+                clock: formElements.clock.value,
+                memory: formElements.memory.value,
+                storage: formElements.storage.value,
+                screenSize: formElements.screenSize.value,
+                other: formElements.other.value,
+                modelNumberCode: formElements.modelNumberCode.value,
+                riskFactors: formElements.riskFactors.value,
+            };
+
+            if (!formData.supplier || !formData.modelName || !formData.modelNumber) {
+                showMessage('「仕入れ先」「型名」「型番」は必須項目です。', true);
+                return;
+            }
+
+            const action = isEditMode ? 'update' : 'add';
+            const requestData = {
+                action: action,
+                data: formData,
+                rowIndex: isEditMode ? parseInt(allInventoryData[currentEditIndex].rowIndex) : null
+            };
+
+            try {
+                const response = await fetch(SPREADSHEET_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    showMessage(isEditMode ? 'データが更新されました！' : 'データが保存されました！');
+                    fetchData(); // Reload data
+                } else {
+                    throw new Error(result.message || '操作に失敗しました。');
+                }
+            } catch (e) {
+                console.error("Error saving data:", e);
+                showMessage(`データの保存に失敗しました: ${e.message}`, true);
+            } finally {
+                // Reset form and UI state
+                form.reset();
+                isEditMode = false;
+                currentEditIndex = null;
+                formTitle.textContent = '新しいデータを入力';
+                saveOrUpdateBtn.textContent = '保存';
+                cancelBtn.classList.add('hidden');
+            }
+        });
+        
+        // Handle edit button click
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('edit-btn')) {
+                const index = parseInt(e.target.dataset.index);
+                const itemToEdit = allInventoryData[index];
+                if (itemToEdit) {
+                    // Populate form with existing data
+                    for (const key in formElements) {
+                        formElements[key].value = itemToEdit[key] || '';
+                    }
+
+                    isEditMode = true;
+                    currentEditIndex = index;
+                    formTitle.textContent = 'データを編集';
+                    saveOrUpdateBtn.textContent = '更新';
+                    cancelBtn.classList.remove('hidden');
+                }
+            }
+        });
+
+        // Handle cancel button click
+        cancelBtn.addEventListener('click', () => {
+            form.reset();
+            isEditMode = false;
+            currentEditIndex = null;
+            formTitle.textContent = '新しいデータを入力';
+            saveOrUpdateBtn.textContent = '保存';
+            cancelBtn.classList.add('hidden');
+        });
+
+        // Handle delete button click (show dialog)
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('delete-btn')) {
+                itemToDeleteIndex = parseInt(e.target.dataset.index);
+                confirmDialog.classList.remove('hidden');
+            }
+        });
+
+        // Handle dialog button clicks
+        confirmDeleteBtn.addEventListener('click', async () => {
+            if (itemToDeleteIndex !== null) {
+                const rowIndex = allInventoryData[itemToDeleteIndex].rowIndex;
+                const requestData = {
+                    action: 'delete',
+                    rowIndex: rowIndex
+                };
+                
+                try {
+                    const response = await fetch(SPREADSHEET_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestData)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    if (result.status === 'success') {
+                        showMessage('データが削除されました。');
+                        fetchData(); // Reload data
+                    } else {
+                        throw new Error(result.message || 'データの削除に失敗しました。');
+                    }
+                } catch (e) {
+                    console.error("Error deleting data:", e);
+                    showMessage(`データの削除に失敗しました: ${e.message}`, true);
+                } finally {
+                    confirmDialog.classList.add('hidden');
+                    itemToDeleteIndex = null;
+                }
+            }
+        });
+
+        cancelDeleteBtn.addEventListener('click', () => {
+            confirmDialog.classList.add('hidden');
+            itemToDeleteIndex = null;
+        });
+
+        // Handle filter input changes
+        filterSupplier.addEventListener('input', applyFilters);
+        filterModelName.addEventListener('input', applyFilters);
+        filterModelNumber.addEventListener('input', applyFilters);
+        filterModelNumberCode.addEventListener('input', applyFilters);
+        
+        // Fetch data from Google Apps Script API
+        const fetchData = async () => {
+            loadingIndicator.classList.remove('hidden');
+            try {
+                const response = await fetch(SPREADSHEET_API_URL, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    allInventoryData = result.data;
+                    applyFilters();
+                    showMessage('スプレッドシートからデータを取得しました。');
+                } else {
+                    throw new Error(result.message || 'データ取得に失敗しました。');
+                }
+            } catch (e) {
+                console.error("Error fetching data:", e);
+                showMessage(`データの取得に失敗しました: ${e.message}`, true);
+                noDataMessage.textContent = 'データの取得に失敗しました。';
+                noDataMessage.classList.remove('hidden');
+                dataContainer.classList.add('hidden');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        };
+
+        // Initial data fetch on load
+        window.addEventListener('load', fetchData);
+    </script>
+</body>
+</html>
